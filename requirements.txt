@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+pydantic-ai
+langgraph
+litellm
+python-telegram-bot[webhooks]
+google-cloud-firestore
+google-api-python-client
+google-authclea
+python-dotenv
