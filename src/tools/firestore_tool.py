@@ -37,11 +37,19 @@ async def get_known_trackers() -> dict:
     return await _run_sync(_get)
 
 
+async def get_tracker_descriptions() -> dict:
+    """Return {tracker_name: description} from Firestore system/config."""
+    def _get():
+        doc = db.collection("system").document("config").get()
+        return doc.to_dict().get("tracker_descriptions", {}) if doc.exists else {}
+    return await _run_sync(_get)
+
+
 async def ensure_config_exists():
     def _check():
         ref = db.collection("system").document("config")
         if not ref.get().exists:
-            ref.set({"trackers": {}, "initialized": True})
+            ref.set({"trackers": {}, "tracker_descriptions": {}, "initialized": True})
             logger.info("Initialized system/config in Firestore")
     await _run_sync(_check)
 
@@ -90,18 +98,19 @@ add_log.__tool_schema__ = {
 
 
 @register_tool("create_tracker")
-async def create_tracker(tracker_name: str, headers: list[str]) -> dict[str, Any]:
+async def create_tracker(tracker_name: str, headers: list[str], description: str = "") -> dict[str, Any]:
     """Register a new tracker in Firestore system/config."""
     if "Date" not in headers:
         headers = ["Date"] + headers
 
     def _write():
-        db.collection("system").document("config").update(
-            {f"trackers.{tracker_name}": headers}
-        )
+        db.collection("system").document("config").update({
+            f"trackers.{tracker_name}": headers,
+            f"tracker_descriptions.{tracker_name}": description,
+        })
 
     await _run_sync(_write)
-    logger.info(f"Registered tracker '{tracker_name}' with headers {headers}")
+    logger.info(f"Registered tracker '{tracker_name}' with headers {headers}, description: '{description}'")
     return {"status": "success", "message": f"Tracker '{tracker_name}' created with headers: {headers}."}
 
 
@@ -116,6 +125,10 @@ create_tracker.__tool_schema__ = {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Column headers e.g. ['Amount', 'Category', 'Notes']",
+            },
+            "description": {
+                "type": "string",
+                "description": "Short description of what this tracker is for (e.g. 'Track daily food expenses')",
             },
         },
         "required": ["tracker_name", "headers"],
