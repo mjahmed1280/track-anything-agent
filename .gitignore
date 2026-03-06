@@ -25,7 +25,7 @@ env/
 
 # Logs and Test Outputs
 # tests/user-logs.txt
-tests/llm-logs.txt
+# tests/llm-logs.txt
 *.log
 checkpoint.md
 
