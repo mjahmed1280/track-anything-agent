@@ -17,11 +17,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from telegram import Update
 
-from src.integrations.telegram import build_application
-from src.tools.firestore_tool import ensure_config_exists, get_known_trackers, get_unsynced_logs, mark_synced
-from src.tools.sheets_tool import sync_tracker
-from src.utils.config import settings
-from src.utils.logger import get_logger
+from .integrations.telegram import build_application
+from .tools.firestore_tool import ensure_config_exists, get_known_trackers, get_unsynced_logs, mark_synced
+from .tools.sheets_tool import sync_tracker
+from .utils.config import settings
+from .utils.logger import get_logger
 
 logger = get_logger(__name__)
 

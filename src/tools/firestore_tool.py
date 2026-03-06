@@ -14,6 +14,7 @@ from typing import Any
 from google.cloud import firestore
 
 from src.agent.registry import register_tool
+from src.tools import sheets_tool
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -56,6 +57,22 @@ async def ensure_config_exists():
 
 # ── Registered Tools ────────────────────────────────────────────────────────
 
+async def _push_log_to_sheets(tracker_name: str, doc_id: str, log_data: dict, headers: list):
+    """Push a single log row to Sheets and mark it synced. Fire-and-forget background task."""
+    try:
+        row = []
+        for h in headers:
+            val = log_data.get(h, "")
+            if hasattr(val, "isoformat"):
+                val = val.isoformat()
+            row.append(str(val))
+        await sheets_tool.append_row(tracker_name, row)
+        await mark_synced(tracker_name, doc_id)
+        logger.info(f"Immediately synced log {doc_id} to Sheets for '{tracker_name}'")
+    except Exception as e:
+        logger.error(f"Immediate Sheets sync failed for '{tracker_name}/{doc_id}': {e} — will retry via background sync")
+
+
 @register_tool("add_log")
 async def add_log(tracker_name: str, values: list[str]) -> dict[str, Any]:
     """Write a log entry to Firestore with synced_to_sheets=False."""
@@ -68,14 +85,22 @@ async def add_log(tracker_name: str, values: list[str]) -> dict[str, Any]:
     log_data["timestamp"] = firestore.SERVER_TIMESTAMP
     log_data["synced_to_sheets"] = False
 
+    doc_id = None
+
     def _write():
-        db.collection("trackers").document(tracker_name).collection("logs").add(log_data)
+        nonlocal doc_id
+        _, doc_ref = db.collection("trackers").document(tracker_name).collection("logs").add(log_data)
         db.collection("stats").document(tracker_name).set(
             {"logs_count": firestore.Increment(1)}, merge=True
         )
+        doc_id = doc_ref.id
 
     await _run_sync(_write)
     logger.info(f"Logged to Firestore [{tracker_name}]: {log_data}")
+
+    # Push to Sheets immediately; falls back to background sync in main.py on failure
+    asyncio.create_task(_push_log_to_sheets(tracker_name, doc_id, log_data, headers))
+
     return {"status": "success", "message": f"Logged to '{tracker_name}'."}
 
 
@@ -111,6 +136,10 @@ async def create_tracker(tracker_name: str, headers: list[str], description: str
 
     await _run_sync(_write)
     logger.info(f"Registered tracker '{tracker_name}' with headers {headers}, description: '{description}'")
+
+    # Create the sheet tab with headers immediately
+    asyncio.create_task(sheets_tool.create_tracker_sheet(tracker_name, headers))
+
     return {"status": "success", "message": f"Tracker '{tracker_name}' created with headers: {headers}."}
 
 
@@ -196,3 +225,4 @@ async def mark_synced(tracker_name: str, doc_id: str):
             .update({"synced_to_sheets": True})
         )
     await _run_sync(_update)
+
