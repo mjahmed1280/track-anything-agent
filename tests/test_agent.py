@@ -145,12 +145,18 @@ class TestResult:
     passed: bool
     failures: list[str]
     error: str | None = None
+    started_at: str = ""
+    finished_at: str = ""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def ts() -> str:
     return datetime.now().strftime("%H:%M:%S")
+
+
+def ts_full() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def extract_tracker(state: dict) -> str | None:
@@ -194,6 +200,7 @@ async def run_test(
     updated_history = conversation_history
     updated_tracker = last_active_tracker
 
+    started_at = ts_full()
     try:
         known_trackers = await get_known_trackers()
         t0 = time.monotonic()
@@ -223,6 +230,7 @@ async def run_test(
         elapsed = time.monotonic() - (t0 if 't0' in dir() else time.monotonic())
         error = str(e)
 
+    finished_at = ts_full()
     passed, failures = check_result(case, tool_called, tracker_used, response, hitl_fired, hitl_confirmed)
     if error:
         passed = False
@@ -239,6 +247,8 @@ async def run_test(
         passed=passed,
         failures=failures,
         error=error,
+        started_at=started_at,
+        finished_at=finished_at,
     )
     return result, updated_history, updated_tracker
 
@@ -254,6 +264,8 @@ def format_result_block(result: TestResult) -> str:
         f"{'='*60}",
         f"[{status}] {result.case.id}: {result.case.description}",
         f"{'='*60}",
+        f"  Started    : {result.started_at}",
+        f"  Finished   : {result.finished_at}",
         f"  Input      : {result.case.user_input}",
         f"  Tool called: {result.tool_called or '(none — direct LLM response)'}",
         f"  Tracker    : {result.tracker_used or '(n/a)'}",

@@ -58,7 +58,7 @@ def get_system_prompt(
     summary_section = f"\nCONVERSATION SUMMARY:\n{state_summary}\n" if state_summary else ""
 
     if last_active_tracker:
-        active_context = f"\nACTIVE CONTEXT: The last tracker used was '{last_active_tracker}'. If the user's message doesn't explicitly name a different tracker, default to '{last_active_tracker}'."
+        active_context = f"\nACTIVE CONTEXT: The last tracker used was '{last_active_tracker}'. Use this as your default UNLESS the user's message contains clear semantic signals for a different tracker — e.g. financial terms (spent, total, amount, cost, budget) point to an Expenses-type tracker even if the user doesn't name it explicitly. Prefer semantic fit over recency."
     else:
         active_context = ""
 
