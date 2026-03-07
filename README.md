@@ -35,6 +35,8 @@ The idea: capture should be zero-friction (a Telegram message), logic should be 
 - **Session persistence** — Conversation history and active tracker context survive across sessions, stored in Firestore per chat.
 
 ---
+## Google sheet output:
+![alt text](image.png)
 
 ## Architecture
 

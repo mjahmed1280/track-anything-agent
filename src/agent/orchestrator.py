@@ -134,6 +134,7 @@ class AgentState(TypedDict):
     confirmed: bool | None              # None = not yet decided, True/False = user decided
     final_response: str | None
     last_tool_called: str | None        # set by execute_tool_node so test inspector can read it
+    last_tool_args: dict | None         # args passed to the last tool — for test-runner validation
     last_active_tracker: str | None     # most recently used tracker — sticky context across turns
 
 
@@ -305,6 +306,7 @@ async def execute_tool_node(state: AgentState) -> AgentState:
         "conversation_history": updated_history[-MAX_HISTORY_MESSAGES:],
         "state_summary": state.get("state_summary", ""),
         "last_tool_called": tool_name,
+        "last_tool_args": state["pending_args"],
         "last_active_tracker": active_tracker,
         "pending_tool": None,
         "pending_args": None,
@@ -365,6 +367,7 @@ async def run(
         "confirmed": None,
         "final_response": None,
         "last_tool_called": None,
+        "last_tool_args": None,
         "last_active_tracker": last_active_tracker,
     }
     result = await graph.ainvoke(initial_state, config=config)
