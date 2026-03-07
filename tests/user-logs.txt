@@ -1,65 +1,65 @@
 
 ============================================================
   Track Anything Agent — Automated Test Suite
-  Run at : 2026-03-07 03:41:33
+  Run at : 2026-03-07 19:22:21
   Thread : auto-test-session
-  Cases  : 10
+  Cases  : 20 (T01-T10 core | T11-T14 ambiguity | T15-T20 extensive)
 ============================================================
 
 ============================================================
 [PASS] T01: Query trackers when database is empty
 ============================================================
-  Started    : 2026-03-07 03:41:35
-  Finished   : 2026-03-07 03:41:54
+  Started    : 2026-03-07 19:22:23
+  Finished   : 2026-03-07 19:22:43
   Input      : what trackers do we have?
   Tool called: (none — direct LLM response)
   Tracker    : (n/a)
   HITL fired : False
-  Elapsed    : 18.8s
+  Elapsed    : 18.5s
   Response:
-    We have trackers for Expenses and Food Intake.
+    Here are the trackers you have: Expenses, Food Intake, and Step-count Tracker.
 
 
 ============================================================
 [PASS] T02: Create an Expenses tracker (HITL expected)
 ============================================================
-  Started    : 2026-03-07 03:41:56
-  Finished   : 2026-03-07 03:42:33
+  Started    : 2026-03-07 19:22:45
+  Finished   : 2026-03-07 19:23:22
   Input      : create an Expenses tracker with columns Item, Amount, Category, and Notes. Use it to track daily spending.
   Tool called: create_tracker
   Tracker    : Expenses
   HITL fired : True → confirmed [OK]
-  Elapsed    : 36.6s
+  Elapsed    : 36.4s
   Response:
-    I've created an Expenses tracker with headers Date, Item, Amount, Category, and Notes.
+    OK. I've created the Expenses tracker with headers Date, Item, Amount, Category, and Notes.
 
 
 ============================================================
 [PASS] T03: Log an expense without specifying tracker (auto-detect)
 ============================================================
-  Started    : 2026-03-07 03:42:35
-  Finished   : 2026-03-07 03:42:47
+  Started    : 2026-03-07 19:23:24
+  Finished   : 2026-03-07 19:23:36
   Input      : I spent 350 on groceries at DMart yesterday
   Tool called: add_log
   Tracker    : Expenses
   HITL fired : False
-  Elapsed    : 11.7s
+  Elapsed    : 12.2s
   Response:
-    OK. I've added that to your Expenses tracker.
+    OK. I've added it to your Expenses tracker.
 
 
 ============================================================
 [PASS] T04: Context memory: show logs without naming tracker
 ============================================================
-  Started    : 2026-03-07 03:42:49
-  Finished   : 2026-03-07 03:43:02
+  Started    : 2026-03-07 19:23:38
+  Finished   : 2026-03-07 19:23:50
   Input      : show me recent logs
   Tool called: get_logs_summary
   Tracker    : Expenses
   HITL fired : False
-  Elapsed    : 12.4s
+  Elapsed    : 11.8s
   Response:
-    Here are your recent expenses:
+    Here are your last 5 expense logs:
 
 | Date       | Item      | Amount | Category | Notes   |
 | ---------- | --------- | ------ | -------- | ------- |
@@ -68,138 +68,308 @@
 | 2026-03-06 | Groceries | 350    | Shopping | DMart   |
 | 2026-03-07 | Coffee    | 80     | Food     | Morning coffee |
 | 2026-03-06 | Groceries | 350    | Shopping | DMart   |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee |
-| 2026-03-06 | Groceries | 350    | Shopping | DMart   |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee |
-| 2026-03-06 | Groceries | 350    | Shopping | DMart   |
-| 2026-03-06 | Groceries | 350    | Shopping | DMart   |
 
-Total expenses: 2540.0
+Total spend: 1560
 
 
 ============================================================
 [PASS] T05: Log another expense with natural language date
 ============================================================
-  Started    : 2026-03-07 03:43:04
-  Finished   : 2026-03-07 03:43:14
+  Started    : 2026-03-07 19:23:52
+  Finished   : 2026-03-07 19:24:03
   Input      : also add coffee 80 rupees this morning
+  Tool called: add_log
+  Tracker    : Expenses
+  HITL fired : False
+  Elapsed    : 10.9s
+  Response:
+    OK. I've added it to your Expenses tracker.
+
+
+============================================================
+[PASS] T06: Create a second tracker — Food Intake (HITL expected)
+============================================================
+  Started    : 2026-03-07 19:24:05
+  Finished   : 2026-03-07 19:24:22
+  Input      : create a Food Intake tracker with columns Meal, Calories, Time. Track what I eat each day.
+  Tool called: create_tracker
+  Tracker    : Food Intake
+  HITL fired : True → confirmed [OK]
+  Elapsed    : 15.9s
+  Response:
+    OK. I've created a Food Intake tracker with the headers Date, Meal, Calories, and Time.
+
+
+============================================================
+[PASS] T07: Log to second tracker — auto-detect from context
+============================================================
+  Started    : 2026-03-07 19:24:24
+  Finished   : 2026-03-07 19:24:35
+  Input      : had dal rice for lunch today around 1pm, about 450 calories
+  Tool called: add_log
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 11.3s
+  Response:
+    OK. I've added it to your Food Intake tracker.
+
+
+============================================================
+[FAIL] T08: Context switch: query Expenses after Food Intake turn
+============================================================
+  Started    : 2026-03-07 19:24:37
+  Finished   : 2026-03-07 19:24:45
+  Input      : how much have I spent total?
+  Tool called: (none — direct LLM response)
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 7.7s
+  Response:
+    I can't provide the total amount spent without knowing which tracker contains your expense information. Could you please clarify which tracker I should use?
+
+  FAILURES:
+    [!!] expect_tool='get_logs_summary', got=None
+    [!!] expect_tracker='Expenses', got='Food Intake'
+
+============================================================
+[PASS] T09: Ambiguous input — agent should ask or infer sensibly
+============================================================
+  Started    : 2026-03-07 19:24:47
+  Finished   : 2026-03-07 19:24:55
+  Input      : add 200
+  Tool called: (none — direct LLM response)
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 7.1s
+  Response:
+    Which tracker do you want to add 200 to?
+
+
+============================================================
+[FAIL] T10: Decline tracker creation (cancel HITL)
+============================================================
+  Started    : 2026-03-07 19:24:57
+  Finished   : 2026-03-07 19:25:04
+  Input      : create a Sleep tracker with columns Hours, Quality
+  Tool called: (none — direct LLM response)
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 7.5s
+  Response:
+    OK, I will create a tracker to record your sleep. Can you confirm you want to create a tracker named "Sleep" with columns "Date", "Hours", and "Quality"? The Date column will be automatically added as the first column.
+
+  FAILURES:
+    [!!] expect_tool='create_tracker', got=None
+    [!!] response missing 'cancel'
+
+============================================================
+[PASS] T11: Ambiguity: bare 'log' with no info — agent must ask for clarification
+============================================================
+  Started    : 2026-03-07 19:25:06
+  Finished   : 2026-03-07 19:25:14
+  Input      : log
+  Tool called: (none — direct LLM response)
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 7.2s
+  Response:
+    Please specify the tracker name and the values you want to log.
+
+
+============================================================
+[PASS] T12: Ambiguity: reference non-existent tracker (Sleep was cancelled)
+============================================================
+  Started    : 2026-03-07 19:25:16
+  Finished   : 2026-03-07 19:25:26
+  Input      : what's in my Sleep tracker?
+  Tool called: get_logs_summary
+  Tracker    : Sleep
+  HITL fired : False
+  Elapsed    : 10.0s
+  Response:
+    There are no logs in your Sleep tracker yet.
+
+
+============================================================
+[PASS] T13: Ambiguity: cross-tracker conflict — calorie+cost in one sentence
+============================================================
+  Started    : 2026-03-07 19:25:28
+  Finished   : 2026-03-07 19:25:36
+  Input      : I had biryani for lunch (600 calories) and it cost me 180 rupees
+  Tool called: (none — direct LLM response)
+  Tracker    : Sleep
+  HITL fired : False
+  Elapsed    : 7.4s
+  Response:
+    Which tracker do you want to add this to?
+
+
+============================================================
+[PASS] T14: Ambiguity: numeric input with no clear tracker after multi-tracker setup
+============================================================
+  Started    : 2026-03-07 19:25:38
+  Finished   : 2026-03-07 19:25:46
+  Input      : add 500 to the tracker
+  Tool called: (none — direct LLM response)
+  Tracker    : Sleep
+  HITL fired : False
+  Elapsed    : 7.3s
+  Response:
+    Which tracker do you want to add this to? And can you provide more details like the item and category?
+
+
+============================================================
+[PASS] T15: Explicit tracker name in query overrides active context
+============================================================
+  Started    : 2026-03-07 19:25:48
+  Finished   : 2026-03-07 19:25:59
+  Input      : show me my Food Intake logs
+  Tool called: get_logs_summary
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 11.3s
+  Response:
+    Here are your Food Intake logs:
+
+| Date       | Meal        | Calories | Time    |
+| ---------- | ----------- | -------- | ------- |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+| 2026-03-07 | Milk Shake  | 600      | 6:00 PM |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+| 2026-03-06 | 2 Bananas   | 200      | Unknown |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice  | 450      | 1:00 PM |
+
+Total calories: 4000
+
+
+============================================================
+[PASS] T16: Multi-field natural-language log → Food Intake
+============================================================
+  Started    : 2026-03-07 19:26:01
+  Finished   : 2026-03-07 19:26:12
+  Input      : yogurt and banana for breakfast this morning, roughly 280 calories, around 8am
+  Tool called: add_log
+  Tracker    : Food Intake
+  HITL fired : False
+  Elapsed    : 10.4s
+  Response:
+    I've added it to your Food Intake tracker.
+
+
+============================================================
+[PASS] T17: Explicit tracker override in log statement → Expenses
+============================================================
+  Started    : 2026-03-07 19:26:14
+  Finished   : 2026-03-07 19:26:25
+  Input      : add to Expenses: petrol 600 rupees this evening
   Tool called: add_log
   Tracker    : Expenses
   HITL fired : False
   Elapsed    : 10.6s
   Response:
-    OK. I've added that to your Expenses tracker.
+    OK. I've added it to your Expenses tracker.
+
 
 ============================================================
-[PASS] T06: Create a second tracker — Food Intake (HITL expected)
+[PASS] T18: Informal/colloquial language expense log
 ============================================================
-  Started    : 2026-03-07 03:43:16
-  Finished   : 2026-03-07 03:43:31
-  Input      : create a Food Intake tracker with columns Meal, Calories, Time. Track what I eat each day.
-  Tool called: create_tracker
-  Tracker    : Food Intake
-  HITL fired : True → confirmed [OK]
-  Elapsed    : 14.6s
-  Response:
-    OK. I've created a Food Intake tracker with columns Date, Meal, Calories, and Time.
-
-============================================================
-[PASS] T07: Log to second tracker — auto-detect from context
-============================================================
-  Started    : 2026-03-07 03:43:33
-  Finished   : 2026-03-07 03:43:45
-  Input      : had dal rice for lunch today around 1pm, about 450 calories
+  Started    : 2026-03-07 19:26:27
+  Finished   : 2026-03-07 19:26:38
+  Input      : bought milk 60 bucks just now
   Tool called: add_log
+  Tracker    : Expenses
+  HITL fired : False
+  Elapsed    : 11.0s
+  Response:
+    OK. I've added it to your Expenses tracker.
+
+
+============================================================
+[PASS] T19: Query with explicit high limit — Food Intake last 20 entries
+============================================================
+  Started    : 2026-03-07 19:26:40
+  Finished   : 2026-03-07 19:26:52
+  Input      : give me the last 20 entries from my Food Intake tracker
+  Tool called: get_logs_summary
   Tracker    : Food Intake
   HITL fired : False
-  Elapsed    : 10.8s
+  Elapsed    : 11.7s
   Response:
-    OK. I've added "Dal Rice, 450 calories, 1:00 PM" to your Food Intake tracker for today.
+    Here are the last 9 entries from your Food Intake tracker:
+
+| Date       | Meal             | Calories | Time    |
+| ---------- | ---------------- | -------- | ------- |
+| 2026-03-07 | Yogurt and Banana | 280      | 8:00 AM |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+| 2026-03-07 | Milk Shake       | 600      | 6:00 PM |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+| 2026-03-06 | 2 Bananas        | 200      | Unknown |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+| 2026-03-07 | Dal Rice         | 450      | 1:00 PM |
+
+Total calories: 4280
 
 
 ============================================================
-[PASS] T08: Context switch: query Expenses after Food Intake turn
+[PASS] T20: List all trackers — agent should name both live trackers, not Sleep
 ============================================================
-  Started    : 2026-03-07 03:43:47
-  Finished   : 2026-03-07 03:43:59
-  Input      : how much have I spent total?
-  Tool called: get_logs_summary
-  Tracker    : Expenses
-  HITL fired : False
-  Elapsed    : 12.1s
-  Response:
-    Here's a summary of your last 10 expenses:
-
-| Date       | Item      | Amount | Category | Notes         |
-|------------|-----------|--------|----------|---------------|
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee|
-| 2026-03-06 | Groceries | 350    | Shopping | DMart         |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee|
-| 2026-03-06 | Groceries | 350    | Shopping | DMart         |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee|
-| 2026-03-06 | Groceries | 350    | Shopping | DMart         |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee|
-| 2026-03-06 | Groceries | 350    | Shopping | DMart         |
-| 2026-03-07 | Coffee    | 80     | Food     | Morning coffee|
-| 2026-03-06 | Groceries | 350    | Shopping | DMart         |
-
-Total amount spent (last 10 entries): 2000.0
-
-
-============================================================
-[PASS] T09: Ambiguous input — agent should ask or infer sensibly
-============================================================
-  Started    : 2026-03-07 03:44:01
-  Finished   : 2026-03-07 03:44:08
-  Input      : add 200
+  Started    : 2026-03-07 19:26:54
+  Finished   : 2026-03-07 19:27:02
+  Input      : what trackers do I have and what are they for?
   Tool called: (none — direct LLM response)
-  Tracker    : Expenses
+  Tracker    : Food Intake
   HITL fired : False
-  Elapsed    : 7.2s
+  Elapsed    : 7.5s
   Response:
-    OK. I've added '200' to your Expenses tracker for today. What was the item and category?
-
-
-============================================================
-[PASS] T10: Decline tracker creation (cancel HITL)
-============================================================
-  Started    : 2026-03-07 03:44:10
-  Finished   : 2026-03-07 03:44:24
-  Input      : create a Sleep tracker with columns Hours, Quality
-  Tool called: create_tracker
-  Tracker    : Sleep
-  HITL fired : True → cancelled [!!]
-  Elapsed    : 12.8s
-  Response:
-    Action cancelled.
+    You have these trackers:
+- Food Intake: Track what I eat each day.
+- Expenses: Track daily spending
+- Step-count Tracker: Track daily step count
 
 
 ============================================================
   TEST SUMMARY
 ============================================================
-  Total      : 10
-  Passed     : 10 [OK]
-  Failed     : 0
-  Avg latency: 14.8s
+  Total      : 20
+  Passed     : 18 [OK]
+  Failed     : 2
+  Avg latency: 11.7s
 
   Results by test:
-    [OK] T01: Query trackers when database is empty         (18.8s)
-    [OK] T02: Create an Expenses tracker (HITL expected)    (36.6s)
-    [OK] T03: Log an expense without specifying tracker (au (11.7s)
-    [OK] T04: Context memory: show logs without naming trac (12.4s)
-    [OK] T05: Log another expense with natural language dat (10.6s)
-    [OK] T06: Create a second tracker — Food Intake (HITL e (14.6s)
-    [OK] T07: Log to second tracker — auto-detect from cont (10.8s)
-    [OK] T08: Context switch: query Expenses after Food Int (12.1s)
-    [OK] T09: Ambiguous input — agent should ask or infer s (7.2s)
-    [OK] T10: Decline tracker creation (cancel HITL)        (12.8s)
+    [OK] T01: Query trackers when database is empty         (18.5s)
+    [OK] T02: Create an Expenses tracker (HITL expected)    (36.4s)
+    [OK] T03: Log an expense without specifying tracker (au (12.2s)
+    [OK] T04: Context memory: show logs without naming trac (11.8s)
+    [OK] T05: Log another expense with natural language dat (10.9s)
+    [OK] T06: Create a second tracker — Food Intake (HITL e (15.9s)
+    [OK] T07: Log to second tracker — auto-detect from cont (11.3s)
+    [!!] T08: Context switch: query Expenses after Food Int (7.7s)  [expect_tool='get_logs_summary', got=None]
+    [OK] T09: Ambiguous input — agent should ask or infer s (7.1s)
+    [!!] T10: Decline tracker creation (cancel HITL)        (7.5s)  [expect_tool='create_tracker', got=None]
+    [OK] T11: Ambiguity: bare 'log' with no info — agent mu (7.2s)
+    [OK] T12: Ambiguity: reference non-existent tracker (Sl (10.0s)
+    [OK] T13: Ambiguity: cross-tracker conflict — calorie+c (7.4s)
+    [OK] T14: Ambiguity: numeric input with no clear tracke (7.3s)
+    [OK] T15: Explicit tracker name in query overrides acti (11.3s)
+    [OK] T16: Multi-field natural-language log → Food Intak (10.4s)
+    [OK] T17: Explicit tracker override in log statement →  (10.6s)
+    [OK] T18: Informal/colloquial language expense log      (11.0s)
+    [OK] T19: Query with explicit high limit — Food Intake  (11.7s)
+    [OK] T20: List all trackers — agent should name both li (7.5s)
 
   ANALYSIS:
-    • Tool calls      : 8/10
-    • HITL prompts    : 3 (should all be create_tracker)
-    • Direct replies  : 2
+    • Tool calls      : 12/20
+    • HITL prompts    : 2 (should all be create_tracker)
+    • Direct replies  : 8
     • Errors          : 0
     [OK] HITL only fired for create_tracker
-    [WW] Slow (>15s): ['T01', 'T02']
-    • Context-aware tests: 3/3 passed (T04, T07, T08)
+    [WW] Slow (>15s): ['T01', 'T02', 'T06']
+    • Context-aware tests: 4/5 passed (T04,T07,T08,T15,T19)
+    • Ambiguity tests    : 5/5 passed (T09,T11,T12,T13,T14)
+    • Extensive tests    : 6/6 passed (T15-T20)
 ============================================================
