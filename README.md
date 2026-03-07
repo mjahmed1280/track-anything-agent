@@ -1,11 +1,10 @@
-# Trackbot Agent
+# Trackbot - Agnetic AI Personal Tracker Bot
 
 > **The bridge between your messy daily life and your structured Life OS.**
 
 A personal AI assistant on Telegram that turns the chaos of daily life — receipts, meals, workouts, spending — into a clean, queryable system. Talk to it in plain language or send a photo. It handles the structure.
 
-![Agent flow](agent-flow.png)
-
+![alt text](trackbot.jpg)
 ---
 
 ## The three pillars
