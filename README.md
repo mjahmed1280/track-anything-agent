@@ -1,34 +1,53 @@
-# Track Anything Agent
+# Trackbot Agent
 
-A personal Life OS assistant — a Telegram bot backed by an agentic, multi-modal AI pipeline that lets you log, track, and query anything from your daily life using natural language or photos.
-![alt text](agent-flow.png)
-> Send a text message or snap a photo of a receipt. The agent understands, proposes what to log, asks for your confirmation, then writes to Firestore and syncs to Google Sheets — all without touching a spreadsheet.
+> **The bridge between your messy daily life and your structured Life OS.**
+
+A personal AI assistant on Telegram that turns the chaos of daily life — receipts, meals, workouts, spending — into a clean, queryable system. Talk to it in plain language or send a photo. It handles the structure.
+
+![Agent flow](agent-flow.png)
 
 ---
 
-## What it does
+## The three pillars
 
-- **Natural language logging** — "I spent $12 on lunch today" creates a structured entry in the right tracker.
-- **Image understanding** — Send a photo of a receipt, invoice, or food label. A vision model extracts the data and the agent proposes the log entry.
-- **Selective Human-in-the-Loop** — Only tracker *creation* pauses for an inline Telegram button ("Yes, log it" / "Cancel"). Logging and querying execute instantly.
+```
+Input (Capture)         Processing (Logic)          Output (Reflection)
+─────────────────       ──────────────────────       ────────────────────
+You send a text or      LangGraph agent understands  Data lives in Firestore,
+photo to Trackbot       intent, maps it to the       synced to Google Sheets
+on Telegram.            right tracker + fields,      for dashboards, trends,
+                        and writes it — no form,     and daily review.
+                        no app, no friction.
+```
+
+The idea: capture should be zero-friction (a Telegram message), logic should be invisible (the agent), and reflection should be effortless (a spreadsheet you didn't have to maintain).
+
+---
+
+## What Trackbot does
+
+- **Natural language logging** — "I spent $12 on lunch today" creates a structured entry in the right tracker, with correct field mapping.
+- **Image understanding** — Send a photo of a receipt, invoice, or food label. A vision model extracts the data and Trackbot proposes the log entry.
+- **Selective Human-in-the-Loop** — Only tracker *creation* pauses for your confirmation (inline Telegram buttons). Logging and querying execute instantly.
 - **Firestore-first persistence** — All writes go to Firestore first, then sync to Google Sheets asynchronously in the background.
-- **Extensible tracker system** — Trackers (Expenses, Meals, Workouts, etc.) are defined dynamically. Adding a new one is a single user message away.
-- **Contextual memory** — The agent remembers which tracker you last used and defaults to it on the next message, so you never have to repeat yourself.
+- **Extensible tracker system** — Trackers (Expenses, Meals, Workouts, Sleep, etc.) are defined dynamically. Creating a new one is a single message.
+- **Contextual memory** — Trackbot remembers which tracker you last used and defaults to it, so you never have to repeat yourself.
+- **Session persistence** — Conversation history and active tracker context survive across sessions, stored in Firestore per chat.
 
 ---
 
 ## Architecture
 
 ```
-Telegram (user interface)
+Telegram (you talk to Trackbot here)
     │
     ▼
-FastAPI  (webhook receiver)
+FastAPI  (webhook receiver on Cloud Run)
     │
     ▼
 LangGraph Orchestrator  (stateful workflow graph)
-    ├── parse_intent node   →  LiteLLM  →  Gemini 2.5 Flash (or any model)
-    ├── [HITL checkpoint]   →  pauses graph, sends inline keyboard to user
+    ├── parse_intent node   →  LiteLLM  →  Gemini 2.5 Flash (Vertex AI)
+    ├── [HITL checkpoint]   →  pauses graph, sends inline keyboard to Telegram
     └── execute_tool node   →  Tool Registry  →  Firestore / Sheets / Vision
 ```
 
@@ -40,18 +59,20 @@ LangGraph Orchestrator  (stateful workflow graph)
 | LLM calls | LiteLLM + fallback chain | Single interface for Gemini on Vertex AI. On 429/503/400, automatically retries: `gemini-2.0-flash` → `gemini-2.5-flash` → `gemini-2.5-pro` |
 | Tool dispatch | Custom Tool Registry | Decorator-based registration; adding a new capability is one file and one decorator |
 | State persistence | Firestore Checkpointer | LangGraph threads survive process restarts; Firestore is already in the stack |
-| Memory | Three-layer context system | Short-term history (6 turns) + rolling summary (`state_summary`) + sticky active tracker. See Memory section below. |
+| Session memory | Firestore `agent_sessions/{chat_id}` | `conversation_history` and `last_active_tracker` persisted per Telegram chat after every turn |
+| Memory architecture | Three-layer context system | Short-term history (6 turns) + rolling summary (`state_summary`) + sticky active tracker |
 | Prompt engineering | Pyramid structure + dynamic injection | Trackers filtered per-request; truth assertion placed immediately after tracker list |
 | Config | pydantic-settings | Strict env-var loading, no hardcoded fallbacks, IDE-friendly |
 | Interface | python-telegram-bot (async) | Webhook mode; inline keyboards for HITL interaction |
-| Deployment | Docker + Cloud Run | Stateless container, scales to zero |
+| Deployment | Docker + Cloud Run (us-central1) | Stateless container, scales to zero, no local Docker needed — Cloud Build handles image builds |
+| Auth | Workload Identity (SA binding) | Cloud Run runs *as* the service account — no JSON key file in the container, pure ADC via metadata server |
 
 ---
 
 ## Project structure
 
 ```
-track-anything-agent/
+trackbot-agent/
 ├── src/
 │   ├── main.py                       # FastAPI entry point (lifespan, webhook endpoint)
 │   ├── agent/
@@ -60,7 +81,7 @@ track-anything-agent/
 │   │   └── prompts.py                # System prompt + vision prompt
 │   ├── tools/
 │   │   ├── sheets_tool.py            # Google Sheets read/write (async)
-│   │   ├── firestore_tool.py         # Firestore CRUD + sync flag management
+│   │   ├── firestore_tool.py         # Firestore CRUD + session persistence + sync flag management
 │   │   └── vision_tool.py            # Image analysis via Gemini Vision
 │   ├── integrations/
 │   │   ├── telegram.py               # Bot handlers: text, photo, inline callback
@@ -95,13 +116,13 @@ ACTIVE CONTEXT: The last tracker used was 'Expenses'. If the user's message
 doesn't explicitly name a different tracker, default to 'Expenses'.
 ```
 
-This means you can say "add 200" right after logging an expense and the agent correctly routes it to Expenses — without asking.
+This means you can say "add 200" right after logging an expense and Trackbot correctly routes it to Expenses — without asking.
 
 **Dynamic tracker injection**
 Rather than dumping every tracker into every prompt, `filter_trackers_for_input()` matches the user's message against tracker names, header names, and description keywords. Only relevant trackers are shown. With many trackers this cuts prompt size by 50–80%. The active tracker is always included as a safety anchor, and the fallback is to show all trackers if nothing matches.
 
 **Context blindness correction**
-If the LLM previously said "no trackers exist" (e.g. at session start) but trackers have since been created, a `[System Correction]` message is injected just before the current user turn to override the stale belief. This prevents the agent from hallucinating an empty state.
+If the LLM previously said "no trackers exist" but trackers have since been created, a `[System Correction]` message is injected just before the current user turn to override the stale belief. This prevents hallucinating an empty state.
 
 **Prompt pyramid structure**
 The system prompt is ordered so the most authoritative information comes first:
@@ -112,7 +133,7 @@ The system prompt is ordered so the most authoritative information comes first:
 5. Critical truth assertion — immediately after the tracker list
 6. Rules
 
-**Context switching** is handled by the LLM using semantic understanding. "How much have I spent total?" after a Food Intake log correctly switches back to Expenses because the question is semantically about spending, not food — and both trackers are visible in the prompt when only 2 exist.
+**Context switching** is handled by the LLM using semantic understanding. "How much have I spent total?" after a Food Intake log correctly switches back to Expenses because the question is semantically about spending, not food.
 
 ---
 
@@ -123,13 +144,13 @@ The system prompt is ordered so the most authoritative information comes first:
 User: "spent $4.50 on coffee"
     │
     ▼
-LLM infers tracker (Expenses) → calls add_log with correct field mapping
+Trackbot infers tracker (Expenses) → calls add_log with correct field mapping
     │
     ▼
 Firestore write → background sync to Google Sheets
     │
     ▼
-Bot: "Logged! Coffee - $4.50 added to Expenses."
+Trackbot: "Logged! Coffee - $4.50 added to Expenses."
 ```
 
 **Creating a new tracker (confirmation required)**
@@ -140,13 +161,13 @@ User: "create an Expenses tracker with columns Item, Amount, Category, Notes"
 LLM calls create_tracker → graph pauses at HITL checkpoint
     │
     ▼
-Bot sends inline keyboard: "Create tracker 'Expenses'? [Yes] [Cancel]"
+Trackbot sends inline keyboard: "Create tracker 'Expenses'? [Yes, log it] [Cancel]"
     │
     ▼  (user clicks Yes)
-Graph resumes → Firestore write
+Graph resumes → Firestore write → Sheets tab created
     │
     ▼
-Bot: "Done! Expenses tracker is ready."
+Trackbot: "Done! Expenses tracker is ready."
 ```
 
 For **photo messages**, the vision model runs first and its structured description is fed into the same orchestrator flow.
@@ -182,15 +203,57 @@ python tests/test_agent.py   # run all 10 scenarios
 
 ## Tech stack
 
-- **Python 3.12**
+- **Python 3.11**
 - **FastAPI** + **uvicorn** — async webhook server
 - **LangGraph** — stateful agentic workflow with HITL checkpoint
 - **LiteLLM** — model-agnostic LLM interface with Vertex AI fallback chain: `gemini-2.0-flash` → `gemini-2.5-flash` → `gemini-2.5-pro`
 - **python-telegram-bot** — async Telegram bot with inline keyboards
-- **Google Cloud Firestore** — primary data store and LangGraph checkpointer
-- **Google Sheets API** — secondary sync target
+- **Google Cloud Firestore** — primary data store, LangGraph checkpointer, and session store
+- **Google Sheets API** — secondary sync target (structured output layer)
 - **pydantic-settings** — environment configuration
-- **Docker** — containerised for Cloud Run deployment
+- **Docker + Cloud Build** — containerised, built on GCP with no local Docker required
+- **Cloud Run** — serverless deployment, scales to zero
+
+---
+
+## Deployment
+
+### Live service
+
+```
+Service: trackbot-agent
+Region:  us-central1
+URL:     https://trackbot-agent-386733832309.us-central1.run.app
+Auth:    Workload Identity — SA bound directly to Cloud Run, no key file
+```
+
+### Rebuild and redeploy
+
+```bash
+# Build via Cloud Build (no local Docker needed)
+gcloud builds submit \
+  --tag us-central1-docker.pkg.dev/gen-lang-client-0746536657/trackbot/trackbot-agent:latest
+
+# Redeploy
+gcloud run deploy trackbot-agent \
+  --image us-central1-docker.pkg.dev/gen-lang-client-0746536657/trackbot/trackbot-agent:latest \
+  --region us-central1
+```
+
+### Register Telegram webhook
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://trackbot-agent-386733832309.us-central1.run.app/webhook"
+```
+
+### Secrets (managed via Secret Manager)
+
+| Secret | What it holds |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `SPREADSHEET_ID` | Google Sheets target |
+
+Non-secret env vars (`GOOGLE_CLOUD_PROJECT`, `VERTEX_LOCATION`) are set directly on the Cloud Run service. No `GOOGLE_APPLICATION_CREDENTIALS` needed — the SA is attached at the service level and all GCP SDKs authenticate via the metadata server.
 
 ---
 
@@ -200,36 +263,36 @@ python tests/test_agent.py   # run all 10 scenarios
 
 | Issue | Detail | Workaround / Fix |
 |---|---|---|
-| `telegram.py` is stateless | Each Telegram message starts a fresh `conversation_history` and `last_active_tracker`. Session context is lost between messages. | Persist `conversation_history`, `last_active_tracker`, and `state_summary` in Firestore keyed by `chat_id`. |
-| Filter threshold brittle at exactly 2 trackers | With 2 trackers, filtering is skipped entirely (both always shown). Keyword matching is too literal for semantic synonyms like "spent" → Expenses. | Threshold already raised to `<= 2`; longer-term, use stemming or embed a small synonym table for common domains. |
+| Filter threshold brittle at exactly 2 trackers | With 2 trackers, filtering is skipped (both always shown). Keyword matching is too literal for semantic synonyms like "spent" → Expenses. | Threshold already raised to `<= 2`; longer-term, use stemming or embed a small synonym table for common domains. |
 | T01 slow (18s+) | On an empty database the LLM still gets a full tool-equipped prompt. No tracker exists so the response is direct, but the round-trip is slow. | Route "list trackers" queries through a lightweight check before hitting the LLM. |
-| No session persistence on restart | `state_summary` and `conversation_history` are in-memory in the AgentState; a process restart resets them. | Write these fields to Firestore after each turn alongside the LangGraph checkpoint. |
-| Telegram handler does not carry `state_summary` forward | The `run()` signature accepts `state_summary` but `telegram.py` does not pass it. | Thread-level state dict in `telegram.py`, same pattern as `conversation_history`. |
+| `state_summary` not carried across sessions | `state_summary` is generated inside the graph per-turn but not yet persisted to Firestore alongside `conversation_history`. | Add `state_summary` to `save_session` / `load_session` and extend `orchestrator.run()` to accept it as input. |
 
 ### Roadmap
 
-- [ ] Cloud Run deployment + Secret Manager for credentials
-- [ ] Telegram webhook registration script
-- [ ] Per-user session state in Firestore (history + summary persistence across restarts)
+- [ ] Daily Debrief — an evening summary sent automatically: "Today you spent $45, ate 2,200 calories, and finished your workout. Your Life OS is up to date."
+- [ ] `update_tracker` tool — add columns, rename headers, with Firestore + Sheets schema migration
+- [ ] Duplicate detection in `add_log` — check for identical (tracker, values) within 60 seconds
+- [ ] Richer tracker filtering — synonym expansion for spending / food / sleep domains
+- [ ] Multi-user support — user isolation in Firestore (currently single-user)
 - [ ] Background sync health-check endpoint
-- [ ] Richer tracker filtering: synonym expansion for spending/food/sleep domains
-- [ ] Multi-user support (user isolation in Firestore)
 
 ---
 
 ## Environment variables
 
+For local development, copy `.env.example` to `.env`:
+
 ```bash
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-VERTEX_LOCATION=us-central1                          # optional, default: us-central1
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa-key.json # Vertex AI + Firestore service account
+VERTEX_LOCATION=us-central1
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa-key.json   # local only — not used in Cloud Run
 SPREADSHEET_ID=your-google-sheets-id
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 ```
 
-The LLM is called via **Vertex AI** (not the Gemini API directly). `GEMINI_API_KEY` is not used. The service account needs the `Vertex AI User` and `Cloud Datastore User` roles.
+On Cloud Run, `TELEGRAM_BOT_TOKEN` and `SPREADSHEET_ID` are mounted from Secret Manager. The service account is bound directly to the Cloud Run service — no key file is used.
 
-Copy `.env.example` to `.env` and fill in the values.
+The LLM is called via **Vertex AI** (not the Gemini API directly). The service account needs `Vertex AI User` and `Cloud Datastore User` roles as a minimum.
 
 ---
 
@@ -240,19 +303,12 @@ Copy `.env.example` to `.env` and fill in the values.
 pip install -r requirements.txt
 
 # Webhook mode (requires a public URL, e.g. via ngrok)
-python src/main.py
+uvicorn src.main:app --reload --port 8080
 
 # Polling mode (no public URL needed — good for local dev)
 python run_polling.py
+
+# Run tests (against live Firestore)
+python tests/clear_data.py
+python tests/test_agent.py
 ```
-
----
-
-## Deployment
-
-```bash
-docker build -t track-anything-agent .
-docker run --env-file .env -p 8080:8080 track-anything-agent
-```
-
-For Cloud Run, set the environment variables as secrets and point Telegram's webhook to the deployed service URL.

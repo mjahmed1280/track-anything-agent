@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     await telegram_app.shutdown()
 
 
-app = FastAPI(title="track-anything-agent", lifespan=lifespan)
+app = FastAPI(title="Trackbot Agent", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

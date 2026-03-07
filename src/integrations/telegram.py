@@ -21,7 +21,7 @@ from telegram.ext import (
 )
 
 from src.agent import orchestrator
-from src.tools.firestore_tool import get_known_trackers
+from src.tools.firestore_tool import get_known_trackers, load_session, save_session
 from src.tools.vision_tool import analyze_image
 from src.utils.logger import get_logger
 
@@ -65,7 +65,9 @@ async def _send_or_confirm(update: Update, state: dict):
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hi! I'm your Life OS tracker. Send me anything to log, or send a photo of a receipt."
+        "Hi! I'm Trackbot — the bridge between your messy daily life and your structured Life OS.\n\n"
+        "Send me anything to log (\"spent $12 on lunch\"), ask what you've tracked, "
+        "or send a photo of a receipt and I'll handle the rest."
     )
 
 
@@ -75,7 +77,13 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"[Telegram] Text from {thread_id}: {user_input}")
 
     known_trackers = await get_known_trackers()
-    state = await orchestrator.run(user_input, known_trackers, thread_id)
+    session = await load_session(thread_id)
+    state = await orchestrator.run(
+        user_input, known_trackers, thread_id,
+        conversation_history=session["conversation_history"],
+        last_active_tracker=session["last_active_tracker"],
+    )
+    await save_session(thread_id, state)
     await _send_or_confirm(update, state)
 
 
@@ -98,7 +106,13 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Feed the vision description back into the orchestrator as a text message
     description = vision_result["description"]
     known_trackers = await get_known_trackers()
-    state = await orchestrator.run(description, known_trackers, thread_id)
+    session = await load_session(thread_id)
+    state = await orchestrator.run(
+        description, known_trackers, thread_id,
+        conversation_history=session["conversation_history"],
+        last_active_tracker=session["last_active_tracker"],
+    )
+    await save_session(thread_id, state)
     await _send_or_confirm(update, state)
 
 

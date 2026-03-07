@@ -226,3 +226,27 @@ async def mark_synced(tracker_name: str, doc_id: str):
         )
     await _run_sync(_update)
 
+
+# ── Session persistence ──────────────────────────────────────────────────────
+
+async def load_session(chat_id: str) -> dict:
+    """Load conversation_history and last_active_tracker for a chat_id."""
+    def _get():
+        doc = db.collection("agent_sessions").document(chat_id).get()
+        return doc.to_dict() if doc.exists else {}
+    data = await _run_sync(_get)
+    return {
+        "conversation_history": data.get("conversation_history", []),
+        "last_active_tracker": data.get("last_active_tracker"),
+    }
+
+
+async def save_session(chat_id: str, state: dict):
+    """Persist conversation_history and last_active_tracker after each turn."""
+    def _set():
+        db.collection("agent_sessions").document(chat_id).set({
+            "conversation_history": state.get("conversation_history", []),
+            "last_active_tracker": state.get("last_active_tracker"),
+        }, merge=True)
+    await _run_sync(_set)
+
